@@ -1,0 +1,85 @@
+version: '3' 
+
+services:
+
+  proxy:
+    container_name: nginx
+    image: jwilder/nginx-proxy:alpine
+    labels:
+      - "com.github.jrcs.letsencrypt_nginx_proxy_companion.nginx_proxy=true"
+    networks:
+      - backbone
+    ports:
+      - 80:80
+      - 443:443
+    volumes:
+      - ./NGINX/conf.d:/etc/nginx/conf.d:rw
+      - ./NGINX/vhost.d:/etc/nginx/vhost.d:rw
+      - ./NGINX/html:/usr/share/nginx/html:rw
+      - ./NGINX/certs:/etc/nginx/certs:ro
+      - /etc/localtime:/etc/localtime:ro
+      - /var/run/docker.sock:/tmp/docker.sock:ro
+    restart: unless-stopped
+
+  letsencrypt:
+    container_name: ACME
+    image: nginxproxy/acme-companion
+    depends_on:
+      - proxy
+    networks:
+      - backbone
+    volumes:
+      - ./NGINX/certs:/etc/nginx/certs:rw
+      - ./NGINX/vhost.d:/etc/nginx/vhost.d:rw
+      - ./NGINX/html:/usr/share/nginx/html:rw
+      - /etc/localtime:/etc/localtime:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - acme:/etc/acme.sh
+    environment:
+      - DEFAULT_EMAIL=binheu@web.de
+    restart: unless-stopped
+  
+    
+  wordpress:
+    container_name: wordpress
+    image: wordpress
+    restart: always
+    depends_on:
+     - letsencrypt
+     - proxy
+     - wordpressdb
+    networks:
+      - backbone
+    environment:
+      WORDPRESS_DB_HOST: db
+      WORDPRESS_DB_USER: wpuser
+      WORDPRESS_DB_PASSWORD: wpassword
+      WORDPRESS_DB_NAME: wpdb
+    volumes:
+      - ./wordpress:/var/www/html
+    environment:
+      - VIRTUAL_HOST=heuser-test-docker.fg-networking.de
+      - LETSENCRYPT_HOST=heuser-test-docker.fg-networking.de
+
+  wordpressdb:
+    container_name: wordpress-db
+    image: mysql:5.7
+    restart: always
+    networks:
+     - backbone
+    environment:
+      MYSQL_DATABASE: wpdb
+      MYSQL_USER: wpuser
+      MYSQL_PASSWORD: wpassword
+      MYSQL_RANDOM_ROOT_PASSWORD: '1'
+    volumes:
+      - ./wordpressdb:/var/lib/mysql
+      
+
+    
+networks:
+  backbone:
+    external: true
+
+
+
